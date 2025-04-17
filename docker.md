@@ -5,14 +5,10 @@
 2. [Docker Image](#dockerimages)
 3. [Docker Compose](#dockercompose)
 4. [Docker Registry](#dockerregistry)
-5. [Installation](#installation)
+5. [Concept](#concept)
+6. [Container Orchestration](#dockerorchestration)
+7. [Installation](#installation)
 
-
-## Concept
-- Unlike VMs, containers are meant to run a specific task or process.
-- Container exists until the process inside it is alive.
-
------
 
 ## Cheatsheet
 ```
@@ -45,6 +41,17 @@ $ docker image list
 $ docker remove images <image name/id>
 
 $ docker run -e DEBUG_ENABLE=true jglab/mypy
+
+
+$ docker volume create myVolume
+$ docker run -v myVolume:/var/lib/mysql mysql
+
+$ docker run --mount type=bind,source=/myVolume,target=/var/lib/mysql mysql
+
+$ docker network create -driver=bridge --subnet=192.168.192.0/24 custom-network
+$ docker network ls
+
+$ docker run --network=custom-network
 
 ```
 -----
@@ -149,7 +156,7 @@ The same sequence has to be followed and structured in a `docker-compose.yaml`.
 
 ```
 ---
-version: 1                          // Not mandatory to use in version 1
+version: "1"                          // Not mandatory to use in version 1
 redis:
     image: redis
 db:
@@ -221,9 +228,113 @@ $ docker pull localhost:5000/myWebapp
 ```
 **Note: -**
 - The localhost can be changed to the IP address of the registry container.
+
+-----
+
+## Concept
+- Unlike VMs, containers are meant to run a specific task or process.
+- Container exists until the process inside it is alive.
+- Containers have their own local PIDs like host machine (PID 1) but they are isolated by namespaces.
+As containers are sub-system of host machine, the PID1 and PID2 of the containers are mapped to PID-x and PID-y in host machine.
+```
+$ docker run -d --name=nginx nginx
+$ docker exec nginx pf -eaf
+
+$ ps -eaf | grep -i docker
+```
+
+- By default, there's no restriction on container for resource utilisation (CPU and memory)
+- To limit processor and memory utilisation, `cgroups` (control groups) are used.
+```
+$ docker run --cpus=0.5 nginx
+$ docker run --memory=256m nginx
+```
+
+- Docker allows `copy-on-write`. This means, the files loaded from the image can be modified in the container as Docker creates a copy of those files so that image integrity is intact.
+
+### Docker Storage
+
+All the docker specific files are available in `/var/lib/docker`
+```
+$ sudo ls -ltra /var/lib/docker/
+drwx--x---  2 root root 4096 Mar 23 20:36 containers
+drwx------  3 root root 4096 Mar 23 20:36 plugins
+-rw-------  1 root root   36 Mar 23 20:36 engine-id
+drwx------  3 root root 4096 Mar 23 20:36 image
+drwxr-x---  3 root root 4096 Mar 23 20:36 network
+drwx------  2 root root 4096 Mar 23 20:36 swarm
+drwx--x--x  3 root root 4096 Mar 23 20:36 buildkit
+drwx------  2 root root 4096 Apr  2 21:33 runtimes
+drwx-----x  2 root root 4096 Apr  2 21:33 volumes
+
+```
+
+Volumes can be either created or mounted to the containers.
+- `bind mount`: When the volume is already available, mount it to the container
+```
+$ docker run -d --name=mysqldb -v /myVolume:/var/lib/mysql mysql
+
+$ docker run --mount type=bind,source=/myVolume,target=/var/lib/mysql mysql
+```
+
+- `volume mount`: When the volume is unavailable, it can be created by docker;
+```
+$ docker volume create mysql_volume
+
+$ docker run -d --name=mysqldb -v mysql_volume:/var/lib/mysql mysql
+```
+
+This creates a directory inside `/var/lib/docker/volumes/mysql_volume`
+
+-----
+
+### Docker Networking
+
+All containers are reachable to each-other by their names using default DNS (127.0.0.11)
+
+By default, Docker creates three networks;
+1. bridge           // This is the default network where all the containers are attached
+2. none
+3. host
+
+To explicitely use these types of networks, specify using `--network`
+```
+$ docker run --network=host nginx
+```
+
+We can also create custom bridged networks
+```
+$ docker network create --driver=bridge --subnet=192.168.192.0/24 custom-network
+$ docker network ls
+
+
+$ docker run --network=custom-network
+```
+
+-----
+
+## DockerOrchestration
+
+Container orchestration is the automated process of managing the lifecycle of containerized applications, including deployment, scaling, and networking. It simplifies the complexities of managing large numbers of
+
+#### Docker Swarm
+
+#### Kubernetes
+
 -----
 
 ## Installation
+
+When *docker-engine* is installed, it installs three components;
+1. Docker Daemon
+2. Rest API
+3. Docker CLI
+
+Docker CLI can also be installed separately and connect to remote Docker server where docker-engine is running.
+
+```
+$ docker -H=<docker-engine address>:2375 run -d nginx
+```
 
 ### Components
 - docker-ce
@@ -291,3 +402,5 @@ $ sudo usermod -aG docker $USER
 ```
 
 Ref: https://docs.docker.com/engine/install/ubuntu/
+
+-----
